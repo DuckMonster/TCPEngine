@@ -8,12 +8,12 @@ public class TCPClient implements Runnable {
 	public static final boolean WRITE_MSG = true;
 	public static int myID,
 		msgRecieved = 0,
-		msgSent = 0;
+		msgSent = 0,
+		serverPort;
 	
-	public static String    serverIP;
-	public static int       serverPort;
+	public static String serverIP;
 	
-	public boolean connected = false, tryConnect = false;
+	public boolean tryConnect = false;
 	Socket serverSocket;
 	IClient host;
 
@@ -27,8 +27,14 @@ public class TCPClient implements Runnable {
 		this.host = host;
 		connect(ip, port);
 	}
-	
-	public void connect(String ip, int port) {		
+
+	public boolean isConnected() {
+		return serverSocket != null && serverSocket.isConnected();
+	}
+
+	public void connect(String ip, int port) {
+		if (isConnected()) disconnect();
+
 		serverIP = ip;
 		serverPort = port;
 		
@@ -41,16 +47,14 @@ public class TCPClient implements Runnable {
 		try {
 			serverSocket = new Socket(serverIP, serverPort);
 			serverSocket.setTcpNoDelay(true);
-			connected = true;
 		} catch(Exception e) {
-			System.out.println("Can't connect to " + serverIP + ":" + Integer.toString(serverPort));
-			System.out.println(e);
+			host.engineException(e);
 			disconnect();
 		}
 		
 		tryConnect = false;
 		
-		if (connected) {
+		if (isConnected()) {
 			sender = new Sender(this, serverSocket);
 			listener = new Listener(this, serverSocket);
 			host.serverConnected();
@@ -74,16 +78,14 @@ public class TCPClient implements Runnable {
 
 	public void disconnect() {
 		close();
-		connected = false;
 		
 		host.serverDisconnected();
 	}
 	
-	public void close() {	
-		if (!connected) return;
-		
+	public void close() {
 		try {
 			sender.close();
+			listener.close();
 			serverSocket.close();
 		} catch(Exception e) {
 			host.engineException(e);
@@ -106,8 +108,7 @@ class Listener implements Runnable {
 		try {
 			in = new DataInputStream(serverSocket.getInputStream());
 		} catch(Exception e) {
-			System.out.println("Can't create DataInputStream");
-			System.out.println(e);
+			hostEngine.host.engineException(e);
 		}
 		
 		listenerThread = new Thread(this);
@@ -115,7 +116,7 @@ class Listener implements Runnable {
 	}
 	
 	public void run() {
-		while(hostEngine.connected && running) {
+		while(hostEngine.isConnected() && running) {
 			try {
 				int size = in.readInt();
 				
@@ -179,19 +180,19 @@ class Sender implements Runnable {
 			for(int i=0; i<msg.buffer.size(); i++) {
 				switch(msg.bufferType.get(i)) {
 					case MessageBuffer.TYPE_INT:
-						out.writeInt((Integer)msg.buffer.get(i));
+						out.writeInt((int)msg.buffer.get(i));
 						break;
 						
 					case MessageBuffer.TYPE_BYTE:
-						out.writeByte((Byte)msg.buffer.get(i));
+						out.writeByte((byte)msg.buffer.get(i));
 						break;
 						
 					case MessageBuffer.TYPE_BOOL:
-						out.writeBoolean((Boolean)msg.buffer.get(i));
+						out.writeBoolean((boolean)msg.buffer.get(i));
 						break;
 						
 					case MessageBuffer.TYPE_WORD:
-						int val = (Integer)msg.buffer.get(i);
+						int val = (int)msg.buffer.get(i);
 						
 						byte[] byteList = new byte[2];
 						byteList[0] = (byte)((val >> 8) & 0xFF);
@@ -215,13 +216,15 @@ class Sender implements Runnable {
 	
 	
 	public void run() {
-		while(hostEngine.connected && running) {
+		while(hostEngine.isConnected() && running) {
 			while(msgBuffer.size() > 0) {
 				sendMessage(msgBuffer.get(0));
 				msgBuffer.remove(0);
 			}
 
-			try{ Thread.sleep(1); } catch(Exception e) {}
+			try{ Thread.sleep(1); } catch(Exception e) {
+				hostEngine.host.engineException(e);
+			}
 		}
 	}
 	

@@ -10,14 +10,10 @@ public class TCPClient implements Runnable {
 		msgRecieved = 0,
 		msgSent = 0,
 		serverPort;
-	public static boolean pinging = false;
-	
-	public static float serverPing,
-			pingBuffer;
 	
 	public static String serverIP;
 	
-	public boolean connected = false, tryConnect = false;
+	public boolean tryConnect = false;
 	Socket serverSocket;
 	IClient host;
 
@@ -31,8 +27,12 @@ public class TCPClient implements Runnable {
 		this.host = host;
 		connect(ip, port);
 	}
-	
-	public void connect(String ip, int port) {		
+
+	public boolean isConnected() {
+		return serverSocket.isConnected();
+	}
+
+	public void connect(String ip, int port) {
 		serverIP = ip;
 		serverPort = port;
 		
@@ -45,7 +45,6 @@ public class TCPClient implements Runnable {
 		try {
 			serverSocket = new Socket(serverIP, serverPort);
 			serverSocket.setTcpNoDelay(true);
-			connected = true;
 		} catch(Exception e) {
 			host.engineException(e);
 			disconnect();
@@ -53,7 +52,7 @@ public class TCPClient implements Runnable {
 		
 		tryConnect = false;
 		
-		if (connected) {
+		if (isConnected()) {
 			sender = new Sender(this, serverSocket);
 			listener = new Listener(this, serverSocket);
 		}
@@ -63,12 +62,7 @@ public class TCPClient implements Runnable {
 		sender.msgBuffer.add(msg);
 	}
 	
-	public void requestPing() {
-		pingBuffer = 0;
-		pinging = true;
-	}
-	
-	public void update(float ut) {
+	public void update() {
 		if (listener == null) return;
 		
 		while(listener.messageList.size() > 0) {
@@ -77,22 +71,18 @@ public class TCPClient implements Runnable {
 			
 			listener.messageList.remove(0);				
 		}
-		
-		if (pinging) pingBuffer += ut;
 	}
 
 	public void disconnect() {
 		close();
-		connected = false;
 		
 		host.serverDisconnected();
 	}
 	
-	public void close() {	
-		if (!connected) return;
-		
+	public void close() {
 		try {
 			sender.close();
+			listener.close();
 			serverSocket.close();
 		} catch(Exception e) {
 			host.engineException(e);
@@ -123,7 +113,7 @@ class Listener implements Runnable {
 	}
 	
 	public void run() {
-		while(hostEngine.connected && running) {
+		while(hostEngine.isConnected() && running) {
 			try {
 				int size = in.readInt();
 				
@@ -223,7 +213,7 @@ class Sender implements Runnable {
 	
 	
 	public void run() {
-		while(hostEngine.connected && running) {
+		while(hostEngine.isConnected() && running) {
 			while(msgBuffer.size() > 0) {
 				sendMessage(msgBuffer.get(0));
 				msgBuffer.remove(0);
