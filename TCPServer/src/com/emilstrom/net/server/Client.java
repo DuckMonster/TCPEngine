@@ -22,6 +22,10 @@ public class Client {
 		sender = new ClientSender(this, mySocket);
 		listener = new ClientListener(this, mySocket);
 	}
+
+	public boolean isConnected() {
+		return mySocket != null && mySocket.isConnected() && !mySocket.isClosed();
+	}
 	
 	public void sendMessage(MessageBuffer msg) {
 		sender.outBuffer.add(msg);
@@ -32,11 +36,14 @@ public class Client {
 	}
 	
 	public void close() {
+		if (!isConnected()) return;
+
 		try {
-			sender.close();
-			mySocket.close();
-			
 			active = false;
+
+			mySocket.close();
+			sender.close();
+			listener.close();
 		} catch(Exception e) {
 			engine.host.engineException(e);
 		}
@@ -75,7 +82,7 @@ class ClientListener implements Runnable {
 				int size = in.readInt();
 				
 				if (size == -1) {
-					hostClient.disconnect();
+					if (hostClient.active) hostClient.disconnect();
 					break;
 				}
 				
@@ -99,7 +106,6 @@ class ClientListener implements Runnable {
 		
 		try {
 			in.close();
-			listenThread.wait();
 		} catch(Exception e) {
 			hostClient.engine.host.engineException(e);
 		}
@@ -186,7 +192,6 @@ class ClientSender implements Runnable {
 		
 		try {
 			out.close();
-			senderThread.wait();
 		} catch(Exception e) {
 			hostClient.engine.host.engineException(e);
 		}

@@ -143,8 +143,6 @@ class Listener implements Runnable {
 		try {
 			in.close();
 			running = false;
-
-			listenerThread.wait();
 		} catch(Exception e) {
 			hostEngine.host.engineException(e);
 		}
@@ -232,8 +230,6 @@ class Sender implements Runnable {
 		try {
 			out.close();
 			running = false;
-
-			senderThread.wait();
 		} catch(Exception e) {
 			hostEngine.host.engineException(e);
 		}
